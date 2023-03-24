@@ -251,14 +251,14 @@ pub fn cpu(config: Config) -> Result<(), Box<dyn Error>> {
                                     .take(6)
                                     .collect::<Vec<u8>>();
 
-        // header: 0xff ++ factory ++ caller ++ salt_random_segment (47 bytes)
+        // header: 0xff ++ factory ++ salt_random_segment (27 bytes)
         let mut header_vec: Vec<u8> = vec![CONTROL_CHARACTER];
         header_vec.extend(config.factory_address.iter());
-        header_vec.extend(config.calling_address.iter());
+        // header_vec.extend(config.calling_address.iter());
         header_vec.extend(salt_random_segment);
 
         // convert the header vector to a fixed-length array
-        let header: [u8; 47] = to_fixed_47(&header_vec);
+        let header: [u8; 27] = to_fixed_27(&header_vec);
 
         // create new hash object
         let mut hash_header = Keccak::new_keccak256();
@@ -274,8 +274,9 @@ pub fn cpu(config: Config) -> Result<(), Box<dyn Error>> {
             // clone the partially-hashed object
             let mut hash = hash_header.clone();
 
-            // update with body and footer (total: 38 bytes)
+            // update with body and footer (total: 6 + 20 + 32 = 56 bytes)
             hash.update(&salt_incremented_segment);
+            hash.update(&config.calling_address);
             hash.update(&footer);
 
             // hash the payload and get the result
@@ -318,12 +319,13 @@ pub fn cpu(config: Config) -> Result<(), Box<dyn Error>> {
 
                     // get the full salt used to create the address
                     let header_hex_string = hex::encode(&header_vec);
-                    let body_hex_string = hex::encode(salt_incremented_segment
-                                                        .to_vec());
+                    let body_hex_string = hex::encode(salt_incremented_segment.to_vec());
+                    let caller_hex_string = hex::encode(config.calling_address);
                     let full_salt = format!(
-                      "0x{}{}",
+                      "0x{}{}{}",
                       &header_hex_string[42..],
-                      &body_hex_string
+                      &body_hex_string,
+                      &caller_hex_string,
                     );
 
                     // encode address and set up a variable for the checksum
@@ -823,6 +825,14 @@ fn without_prefix(string: String) -> String {
 /// Convert a properly-sized vector to a fixed array of 20 bytes.
 fn to_fixed_20(bytes: std::vec::Vec<u8>) -> [u8; 20] {
     let mut array = [0; 20];
+    let bytes = &bytes[..array.len()];
+    array.copy_from_slice(bytes);
+    array
+}
+
+/// Convert a properly-sized vector to a fixed array of 27 bytes.
+fn to_fixed_27(bytes: &std::vec::Vec<u8>) -> [u8; 27] {
+    let mut array = [0; 27];
     let bytes = &bytes[..array.len()];
     array.copy_from_slice(bytes);
     array
